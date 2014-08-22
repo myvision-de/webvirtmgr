@@ -78,7 +78,7 @@ def servers_list(request):
         """
         all_hosts = []
         for host in hosts:
-            if (connection_manager.host_is_up(host, host.login, host.passwd, host.conn)):
+            if (connection_manager.host_is_up(host.hostname, host.login, host.password, host.type)):
                 status = 1
             else:
                 status = 'Unknown Error'
@@ -166,7 +166,7 @@ def infrastructure(request):
     hosts_vms = {}
 
     for host in compute:
-        if connection_manager.host_is_up(host.name, host.login, host.password, host.type):
+        if connection_manager.host_is_up(host.hostname, host.login, host.password, host.type):
             try:
                 conn = wvmHostDetails(host, host.login, host.password, host.type)
                 host_info = conn.get_node_info()
