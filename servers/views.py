@@ -20,6 +20,49 @@ def index(request):
         return HttpResponseRedirect('/login')
     else:
         return HttpResponseRedirect('/servers')
+    
+def connection_debug(request):
+    '''
+    outputs connection debug info
+    '''
+    html = '<html><head><title>Connection Debug</title></head><body>'
+    
+    import time, os, threading
+    html += '<h1>Connection Debug</h1><br /><dl>'
+    
+    html += '<dt>Process ID:</dt>'
+    html += '<dd>' + str(os.getpid()) + '</dd>'
+    
+    html += '<dt>Process ID:</dt>'
+    html += '<dd>' + str(threading.current_thread()) + '</dd>'
+    
+    html += '</dl><br />'
+    
+    for host, connections in connection_manager._connections.iteritems():
+        for connection in connections:
+            html += '<h2>' + str(connection) + '</h2>'
+            html += '<dl>'
+            
+            html += '<dt>Host Key:</dt>'
+            html += '<dd>' + repr(host) + '</dd>'
+            
+            html += '<dt>Connection Status:</dt>'
+            html += '<dd>' + ('Connected' if connection.connected else 'Disconnected') + '</dd>'
+            
+            html += '<dt>Last Error:</dt>'
+            html += '<dd>' + str(connection.last_error) + '</dd>'
+            
+            html += '<dt>Use Count:</dt>'
+            html += '<dd>' + (str(connection.use_count) if hasattr(connection, 'use_count') else '---') + '</dd>'
+            
+            html += '<dt>Uptime:</dt>'
+            html += '<dd>' + (str(time.time() - connection.connection_time) if hasattr(connection, 'connection_time') and connection.connection_time is not None else '---') + '</dd>'
+            
+            html += '</dl>'
+            html += '<br />' 
+    
+    html += '</body></html>'
+    return HttpResponse(html)
 
 
 def servers_list(request):

@@ -85,6 +85,10 @@ class wvmConnection(object):
                     # do some preprocessing of the connection:
                     #     * set keep alive interval
                     #     * set connection close/fail handler
+                    #debug:
+                    self.use_count = 0
+                    import time
+                    self.connection_time = time.time()
                     try:
                         self.connection.setKeepAlive(connection_manager.keepalive_interval, connection_manager.keepalive_count)
                         self.connection.registerCloseCallback(self.__connection_close_callback, None)
@@ -135,6 +139,8 @@ class wvmConnection(object):
                 
             # prevent other threads from using the connection (in the future)
             self.connection = None
+            self.connection_time = None
+            self.use_count = 0
         finally:
             self.connection_state_lock.release()
             
@@ -288,6 +294,7 @@ class wvmConnectionManager(object):
             
         if connection.connected:
             # return libvirt connection object
+            connection.use_count += 1
             return connection.connection
         else:
             # raise libvirt error

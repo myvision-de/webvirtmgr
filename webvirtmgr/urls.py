@@ -22,6 +22,7 @@ urlpatterns = patterns('',
     url(r'^info/hostusage/(\d+)/$', 'hostdetail.views.hostusage', name='hostusage'),
     url(r'^info/insts_status/(\d+)/$', 'instance.views.insts_status', name='insts_status'),
     url(r'^info/instusage/(\d+)/([\w\-\.]+)/$', 'instance.views.instusage', name='instusage'),
+    url(r'^condebug/$', 'servers.views.connection_debug', name='connection_debug'),
 )
 
 urlpatterns += patterns('',
