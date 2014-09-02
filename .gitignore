@@ -12,3 +12,4 @@ dist
 webvirtmgr.egg-info
 .project
 .pydevproject
+.settings
