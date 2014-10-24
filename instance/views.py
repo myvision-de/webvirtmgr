@@ -1,11 +1,13 @@
 from string import letters, digits
 from random import choice
+from bisect import insort
 
 from django.shortcuts import render_to_response
 from django.http import HttpResponseRedirect, HttpResponse
 from django.template import RequestContext
 from django.utils.translation import ugettext_lazy as _
 import json
+import time
 
 from instance.models import Instance
 from servers.models import Compute
@@ -37,7 +39,8 @@ def instusage(request, host_id, vname):
     net_error = False
     networks = None
     disks = None
-
+    points = 5
+    curent_time = time.strftime("%H:%M:%S")
     compute = Compute.objects.get(id=host_id)
 
     try:
@@ -50,52 +53,44 @@ def instusage(request, host_id, vname):
         if status == 3 or status == 5:
             networks = conn.get_net_device()
             disks = conn.get_disk_device()
+        cpu_usage = conn.cpu_usage()
+        blk_usage = conn.disk_usage()
+        net_usage = conn.net_usage()
+        conn.close()
     except libvirtError:
         status = None
+        blk_usage = None
+        cpu_usage = None
+        net_usage = None
 
     if status and status == 1:
         try:
-            blk_usage = conn.disk_usage()
-            cpu_usage = conn.cpu_usage()
-            net_usage = conn.net_usage()
-            conn.close()
-        except libvirtError:
-            blk_usage = None
-            cpu_usage = None
-            net_usage = None
-
-        try:
             cookies['cpu'] = request._cookies['cpu']
+            cookies['hdd'] = request._cookies['hdd']
+            cookies['net'] = request._cookies['net']
+            cookies['timer'] = request._cookies['timer']
         except KeyError:
             cookies['cpu'] = None
-
-        try:
-            cookies['hdd'] = request._cookies['hdd']
-        except KeyError:
             cookies['hdd'] = None
-
-        try:
-            cookies['net'] = request._cookies['net']
-        except KeyError:
             cookies['net'] = None
 
         if cookies['cpu'] == '{}' or not cookies['cpu'] or not cpu_usage:
             datasets['cpu'] = [0]
+            datasets['timer'] = [curent_time]
         else:
             datasets['cpu'] = eval(cookies['cpu'])
-        if len(datasets['cpu']) > 10:
-            while datasets['cpu']:
-                del datasets['cpu'][0]
-                if len(datasets['cpu']) == 10:
-                    break
-        if len(datasets['cpu']) <= 9:
-            datasets['cpu'].append(int(cpu_usage['cpu']))
-        if len(datasets['cpu']) == 10:
-            datasets['cpu'].append(int(cpu_usage['cpu']))
-            del datasets['cpu'][0]
+            datasets['timer'] = eval(cookies['timer'])
+
+        datasets['timer'].append(curent_time)
+        datasets['cpu'].append(int(cpu_usage['cpu']))
+
+        if len(datasets['timer']) > points:
+            datasets['timer'].pop(0)
+        if len(datasets['cpu']) > points:
+            datasets['cpu'].pop(0)
 
         cpu = {
-            'labels': [""] * 10,
+            'labels': datasets['timer'],
             'datasets': [
                 {
                     "fillColor": "rgba(241,72,70,0.5)",
@@ -120,31 +115,16 @@ def instusage(request, host_id, vname):
                     blk_error = True
 
             if not blk_error:
-                if len(datasets_rd) > 10:
-                    while datasets_rd:
-                        del datasets_rd[0]
-                        if len(datasets_rd) == 10:
-                            break
-                if len(datasets_wr) > 10:
-                    while datasets_wr:
-                        del datasets_wr[0]
-                        if len(datasets_wr) == 10:
-                            break
+                datasets_rd.append(int(blk['rd']) / 1048576)
+                datasets_wr.append(int(blk['wr']) / 1048576)
 
-                if len(datasets_rd) <= 9:
-                    datasets_rd.append(int(blk['rd']) / 1048576)
-                if len(datasets_rd) == 10:
-                    datasets_rd.append(int(blk['rd']) / 1048576)
-                    del datasets_rd[0]
-
-                if len(datasets_wr) <= 9:
-                    datasets_wr.append(int(blk['wr']) / 1048576)
-                if len(datasets_wr) == 10:
-                    datasets_wr.append(int(blk['wr']) / 1048576)
-                    del datasets_wr[0]
+                if len(datasets_rd) > points:
+                    datasets_rd.pop(0)
+                if len(datasets_wr) >= points + 1:
+                    datasets_wr.pop(0)
 
                 disk = {
-                    'labels': [""] * 10,
+                    'labels': datasets['timer'],
                     'datasets': [
                         {
                             "fillColor": "rgba(83,191,189,0.5)",
@@ -179,31 +159,16 @@ def instusage(request, host_id, vname):
                     net_error = True
 
             if not net_error:
-                if len(datasets_rx) > 10:
-                    while datasets_rx:
-                        del datasets_rx[0]
-                        if len(datasets_rx) == 10:
-                            break
-                if len(datasets_tx) > 10:
-                    while datasets_tx:
-                        del datasets_tx[0]
-                        if len(datasets_tx) == 10:
-                            break
+                datasets_rx.append(int(net['rx']) / 1048576)
+                datasets_tx.append(int(net['tx']) / 1048576)
 
-                if len(datasets_rx) <= 9:
-                    datasets_rx.append(int(net['rx']) / 1048576)
-                if len(datasets_rx) == 10:
-                    datasets_rx.append(int(net['rx']) / 1048576)
-                    del datasets_rx[0]
-
-                if len(datasets_tx) <= 9:
-                    datasets_tx.append(int(net['tx']) / 1048576)
-                if len(datasets_tx) == 10:
-                    datasets_tx.append(int(net['tx']) / 1048576)
-                    del datasets_tx[0]
+                if len(datasets_rx) > points:
+                    datasets_rx.pop(0)
+                if len(datasets_tx) > points:
+                    datasets_tx.pop(0)
 
                 network = {
-                    'labels': [""] * 10,
+                    'labels': datasets['timer'],
                     'datasets': [
                         {
                             "fillColor": "rgba(83,191,189,0.5)",
@@ -224,8 +189,6 @@ def instusage(request, host_id, vname):
 
             json_net.append({'dev': net['dev'], 'data': network})
             cookie_net[net['dev']] = [datasets_rx, datasets_tx]
-
-        data = json.dumps({'status': status, 'cpu': cpu, 'hdd': json_blk, 'net': json_net})
     else:
         datasets = [0] * 10
         cpu = {
@@ -288,12 +251,14 @@ def instusage(request, host_id, vname):
                 ]
             }
             json_blk.append({'dev': blk['dev'], 'data': disk})
-        data = json.dumps({'status': status, 'cpu': cpu, 'hdd': json_blk, 'net': json_net})
+
+    data = json.dumps({'status': status, 'cpu': cpu, 'hdd': json_blk, 'net': json_net})
 
     response = HttpResponse()
     response['Content-Type'] = "text/javascript"
     if status == 1:
         response.cookies['cpu'] = datasets['cpu']
+        response.cookies['timer'] = datasets['timer']
         response.cookies['hdd'] = cookie_blk
         response.cookies['net'] = cookie_net
     response.write(data)
@@ -429,7 +394,7 @@ def instance(request, host_id, vname):
 
     errors = []
     messages = []
-    time_refresh = TIME_JS_REFRESH
+    time_refresh = TIME_JS_REFRESH * 3
     compute = Compute.objects.get(id=host_id)
     computes = Compute.objects.all()
     computes_count = len(computes)
@@ -455,7 +420,11 @@ def instance(request, host_id, vname):
         networks = conn.get_net_device()
         media_iso = sorted(conn.get_iso_media())
         vcpu_range = conn.get_max_cpus()
-        memory_range = [256, 512, 1024, 2048, 4096, 6144, 8192, 16384]
+        memory_range = [256, 512, 768, 1024, 2048, 4096, 6144, 8192, 16384]
+        if not memory in memory_range:
+            insort(memory_range, memory)
+        if not cur_memory in memory_range:
+            insort(memory_range, cur_memory)
         memory_host = conn.get_max_memory()
         vcpu_host = len(vcpu_range)
         telnet_port = conn.get_telnet_port()
@@ -505,11 +474,11 @@ def instance(request, host_id, vname):
             if 'delete' in request.POST:
                 if conn.get_status() == 1:
                     conn.force_shutdown()
-                if request.POST.get('delete_disk', ''):
-                    conn.delete_disk()
                 try:
                     instance = Instance.objects.get(compute_id=host_id, name=vname)
                     instance.delete()
+                    if request.POST.get('delete_disk', ''):
+                        conn.delete_disk()
                 finally:
                     conn.delete()
                 return HttpResponseRedirect('/instances/%s/' % host_id)
@@ -538,7 +507,13 @@ def instance(request, host_id, vname):
                 vcpu = request.POST.get('vcpu', '')
                 cur_vcpu = request.POST.get('cur_vcpu', '')
                 memory = request.POST.get('memory', '')
+                memory_custom = request.POST.get('memory_custom', '')
+                if memory_custom:
+                    memory = memory_custom
                 cur_memory = request.POST.get('cur_memory', '')
+                cur_memory_custom = request.POST.get('cur_memory_custom', '')
+                if cur_memory_custom:
+                    cur_memory = cur_memory_custom
                 conn.change_settings(description, cur_memory, memory, cur_vcpu, vcpu)
                 return HttpResponseRedirect(request.get_full_path() + '#instancesettings')
             if 'change_xml' in request.POST:
