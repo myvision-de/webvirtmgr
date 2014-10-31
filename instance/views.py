@@ -53,9 +53,10 @@ def instusage(request, host_id, vname):
         if status == 3 or status == 5:
             networks = conn.get_net_device()
             disks = conn.get_disk_device()
-        cpu_usage = conn.cpu_usage()
-        blk_usage = conn.disk_usage()
-        net_usage = conn.net_usage()
+        else:
+            cpu_usage = conn.cpu_usage()
+            blk_usage = conn.disk_usage()
+            net_usage = conn.net_usage()
         conn.close()
     except libvirtError:
         status = None
@@ -190,9 +191,9 @@ def instusage(request, host_id, vname):
             json_net.append({'dev': net['dev'], 'data': network})
             cookie_net[net['dev']] = [datasets_rx, datasets_tx]
     else:
-        datasets = [0] * 10
+        datasets = [0] * points
         cpu = {
-            'labels': [""] * 10,
+            'labels': [""] * points,
             'datasets': [
                 {
                     "fillColor": "rgba(241,72,70,0.5)",
@@ -205,10 +206,10 @@ def instusage(request, host_id, vname):
         }
 
         for i, net in enumerate(networks):
-            datasets_rx = [0] * 10
-            datasets_tx = [0] * 10
+            datasets_rx = [0] * points
+            datasets_tx = [0] * points
             network = {
-                'labels': [""] * 10,
+                'labels': [""] * points,
                 'datasets': [
                     {
                         "fillColor": "rgba(83,191,189,0.5)",
@@ -229,10 +230,10 @@ def instusage(request, host_id, vname):
             json_net.append({'dev': i, 'data': network})
 
         for blk in disks:
-            datasets_wr = [0] * 10
-            datasets_rd = [0] * 10
+            datasets_wr = [0] * points
+            datasets_rd = [0] * points
             disk = {
-                'labels': [""] * 10,
+                'labels': [""] * points,
                 'datasets': [
                     {
                         "fillColor": "rgba(83,191,189,0.5)",
